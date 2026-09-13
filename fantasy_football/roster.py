@@ -1,21 +1,18 @@
-#!/usr/bin/env python3
 """List your ESPN fantasy football roster (starters and bench), ordered
 QB-first, with each player's game day/kickoff time (Central), projected
 points from both ESPN and Sleeper (both scored per your league's own
 scoring settings), and their actual score for the week once final.
-
-Usage:
-    python3 roster.py
-    python3 roster.py --week 3
-    python3 roster.py --format ppr   # compare against generic PPR instead
 """
-import argparse
+from enum import Enum
+from typing import Optional
 
-import custom_scoring
-import espn
-import sleeper
-from colors import Color, color_enabled, make_painter, status_color
-from espn_stat_labels import STAT_LABELS
+import typer
+
+from . import custom_scoring
+from . import espn
+from . import sleeper
+from .colors import Color, color_enabled, make_painter, status_color
+from .espn_stat_labels import STAT_LABELS
 
 BENCH_SLOTS = {"Bench", "IR"}
 
@@ -105,26 +102,29 @@ def print_group(title, players, paint):
     print()
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--week", type=int, help="NFL week (defaults to the current week)")
-    parser.add_argument("--format", choices=list(custom_scoring.FORMAT_FIELDS.keys()) + ["league"],
-                         default="league",
-                         help="Scoring format for the Sleeper column (default: league, i.e. your "
-                              "actual ESPN scoring rules). ESPN's own column always reflects "
-                              "your league's real settings regardless of this flag.")
-    parser.add_argument("--no-color", action="store_true", help="Disable colored output")
-    args = parser.parse_args()
-    paint = make_painter(color_enabled(args.no_color))
+ScoringFormat = Enum("ScoringFormat", {k: k for k in list(custom_scoring.FORMAT_FIELDS.keys()) + ["league"]})
+
+
+def command(
+    week: Optional[int] = typer.Option(None, help="NFL week (defaults to the current week)"),
+    format: ScoringFormat = typer.Option(
+        ScoringFormat.league.value,
+        help="Scoring format for the Sleeper column (default: league, i.e. your actual ESPN "
+             "scoring rules). ESPN's own column always reflects your league's real settings "
+             "regardless of this flag."),
+    no_color: bool = typer.Option(False, "--no-color", help="Disable colored output"),
+):
+    """List your ESPN roster: game time, projections, and actual scores once played."""
+    paint = make_painter(color_enabled(no_color))
 
     state = sleeper.get_state()
     season = state["league_season"]
-    week = args.week or state["display_week"]
+    resolved_week = week or state["display_week"]
 
     config = espn.load_config()
-    team_name, roster = espn.get_my_roster(config, week=week)
+    team_name, roster = espn.get_my_roster(config, week=resolved_week)
 
-    if args.format == "league":
+    if format == ScoringFormat.league:
         league_name, rules = espn.get_scoring_settings(config)
         unmapped = custom_scoring.unmapped_rules(rules)
         if unmapped:
@@ -134,24 +134,20 @@ def main():
                         f"column: {labels}.", Color.DIM) + "\n")
         scorer = custom_scoring.make_scorer("league", rules)
     else:
-        scorer = custom_scoring.make_scorer(args.format)
+        scorer = custom_scoring.make_scorer(format.value)
 
     sleeper_players = sleeper.get_players()
-    projections = sleeper.get_projections(season, week)
+    projections = sleeper.get_projections(season, resolved_week)
     pro_schedule = espn.get_pro_schedule(season)
 
     attach_sleeper_pid(roster, sleeper_players)
     attach_sleeper_projection(roster, projections, scorer)
-    attach_game_info(roster, pro_schedule, week)
+    attach_game_info(roster, pro_schedule, resolved_week)
 
-    print(paint(f"{team_name or 'My Team'} -- Week {week} ({season})", Color.BOLD) + "\n")
+    print(paint(f"{team_name or 'My Team'} -- Week {resolved_week} ({season})", Color.BOLD) + "\n")
 
     starters = [p for p in roster if p["slot"] not in BENCH_SLOTS]
     bench = [p for p in roster if p["slot"] in BENCH_SLOTS]
 
     print_group("Starters", starters, paint)
     print_group("Bench", bench, paint)
-
-
-if __name__ == "__main__":
-    main()

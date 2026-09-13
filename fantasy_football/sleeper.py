@@ -8,10 +8,10 @@ import json
 import re
 import time
 import urllib.request
-from pathlib import Path
+
+from .paths import CACHE_DIR
 
 BASE_URL = "https://api.sleeper.app/v1"
-CACHE_DIR = Path(__file__).parent / ".cache"
 
 PLAYERS_TTL_SECONDS = 7 * 24 * 60 * 60   # player directory changes rarely
 PROJECTIONS_TTL_SECONDS = 60 * 60        # projections firm up during the week
@@ -29,7 +29,7 @@ def _fetch_json(url):
 
 
 def _cached(cache_name, ttl_seconds, fetch_fn):
-    CACHE_DIR.mkdir(exist_ok=True)
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_file = CACHE_DIR / cache_name
     if cache_file.exists() and (time.time() - cache_file.stat().st_mtime) < ttl_seconds:
         return json.loads(cache_file.read_text())

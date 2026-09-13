@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fantasy-football-cli"
+version = "0.1.0"
+description = "CLI tools for fantasy football start/sit decisions, using Sleeper data scored to your real ESPN league rules."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+dependencies = [
+    "typer>=0.12",
+]
+
+[project.scripts]
+ff = "fantasy_football.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["fantasy_football*"]

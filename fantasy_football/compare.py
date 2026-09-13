@@ -1,19 +1,17 @@
-#!/usr/bin/env python3
 """Compare two fantasy football players and get a start/sit recommendation
 for a given week, using free projection and stats data from Sleeper.
-
-Usage:
-    python3 compare.py "Christian McCaffrey" "Bijan Robinson"
-    python3 compare.py "Josh Allen" "Lamar Jackson" --week 3 --format half_ppr
 """
-import argparse
 import sys
+from enum import Enum
+from typing import Optional
 
-import custom_scoring
-import espn
-import sleeper
-from colors import Color, color_enabled, make_painter, status_color
-from espn_stat_labels import STAT_LABELS
+import typer
+
+from . import custom_scoring
+from . import espn
+from . import sleeper
+from .colors import Color, color_enabled, make_painter, status_color
+from .espn_stat_labels import STAT_LABELS
 
 CONCERNING_STATUSES = {"Out", "Doubtful", "IR", "Suspended", "PUP"}
 RECENT_GAMES_LOOKBACK = 3
@@ -225,34 +223,36 @@ def setup_scorer(format_arg, paint):
     return custom_scoring.make_scorer(format_name), f"{format_name} scoring"
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("player_a", help="First player's name")
-    parser.add_argument("player_b", help="Second player's name")
-    parser.add_argument("--week", type=int, help="NFL week number (defaults to the current week)")
-    parser.add_argument("--season", help="Season year (defaults to the current season)")
-    parser.add_argument("--format", choices=list(custom_scoring.FORMAT_FIELDS.keys()) + ["league"],
-                         default=None,
-                         help="Scoring format (default: your ESPN league's rules if "
-                              "espn_config.json exists, else ppr)")
-    parser.add_argument("--no-color", action="store_true", help="Disable colored output")
-    args = parser.parse_args()
+ScoringFormat = Enum("ScoringFormat", {k: k for k in list(custom_scoring.FORMAT_FIELDS.keys()) + ["league"]})
 
-    paint = make_painter(color_enabled(args.no_color))
-    scorer, format_label = setup_scorer(args.format, paint)
+
+def command(
+    player_a: str = typer.Argument(..., help="First player's name"),
+    player_b: str = typer.Argument(..., help="Second player's name"),
+    week: Optional[int] = typer.Option(None, help="NFL week number (defaults to the current week)"),
+    season: Optional[str] = typer.Option(None, help="Season year (defaults to the current season)"),
+    format: Optional[ScoringFormat] = typer.Option(
+        None, help="Scoring format (default: your ESPN league's rules if "
+                    "espn_config.json exists, else ppr)"),
+    no_color: bool = typer.Option(False, "--no-color", help="Disable colored output"),
+):
+    """Compare two players and get a start/sit recommendation for a given week."""
+    paint = make_painter(color_enabled(no_color))
+    scorer, format_label = setup_scorer(format.value if format else None, paint)
 
     state = sleeper.get_state()
-    season = args.season or state["league_season"]
-    week = args.week or state["display_week"]
+    resolved_season = season or state["league_season"]
+    resolved_week = week or state["display_week"]
     recent_weeks = sleeper.recent_weeks(state, count=RECENT_GAMES_LOOKBACK)
 
-    print(paint(f"Comparing for {season} week {week} ({format_label})...", Color.BOLD) + "\n")
+    print(paint(f"Comparing for {resolved_season} week {resolved_week} ({format_label})...",
+                Color.BOLD) + "\n")
 
     players = sleeper.get_players()
-    projections = sleeper.get_projections(season, week)
+    projections = sleeper.get_projections(resolved_season, resolved_week)
 
-    pid_a, info_a = resolve_player(args.player_a, players)
-    pid_b, info_b = resolve_player(args.player_b, players)
+    pid_a, info_a = resolve_player(player_a, players)
+    pid_b, info_b = resolve_player(player_b, players)
     print()
 
     a = build_summary(pid_a, info_a, projections, scorer, recent_weeks)
@@ -262,7 +262,3 @@ def main():
     print_player_block("Player B", b, paint)
 
     print_recommendation(a, b, paint)
-
-
-if __name__ == "__main__":
-    main()

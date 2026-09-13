@@ -1,22 +1,36 @@
 # Fantasy Football Start/Sit Tool
 
-Compares two players and recommends who to start for a given week, using
-free weekly projections and stats from the
-[Sleeper API](https://docs.sleeper.com/) (no account or API key needed).
+A `ff` command-line tool for weekly fantasy football decisions: compare
+two players, list your ESPN roster with live scores, or check your
+league's actual scoring rules. Built on free data from the
+[Sleeper API](https://docs.sleeper.com/) (no account or API key needed)
+and ESPN's own (unofficial) fantasy API.
 
-## Usage
+## Install
 
 ```
-python3 compare.py "Christian McCaffrey" "Bijan Robinson"
-python3 compare.py "Josh Allen" "Lamar Jackson" --week 3 --format half_ppr
+python3 -m venv .venv
+.venv/bin/pip install -e .
+```
+
+This installs an `ff` command inside `.venv/`. Either activate the venv
+(`source .venv/bin/activate`, then just run `ff ...`) or call it directly
+as `.venv/bin/ff ...`.
+
+## `ff compare`
+
+```
+ff compare "Christian McCaffrey" "Bijan Robinson"
+ff compare "Josh Allen" "Lamar Jackson" --week 3 --format half_ppr
 ```
 
 Options:
 - `--week N` -- NFL week to compare (defaults to the current week)
 - `--season YYYY` -- season year (defaults to the current season)
 - `--format ppr|half_ppr|std|league` -- scoring format. Defaults to
-  `league` (your actual ESPN league's scoring rules) if `espn_config.json`
-  is set up, otherwise `ppr`. Pass this to override either way.
+  `league` (your actual ESPN league's scoring rules) if
+  `~/.fantasy-football/espn_config.json` is set up, otherwise `ppr`.
+  Pass this to override either way.
 - `--no-color` -- disable colored output (also respected: piping to a
   file/another command, or setting `NO_COLOR`)
 
@@ -48,30 +62,30 @@ toss-up and the tiebreaker becomes recent scoring form instead --
 the output explains which basis was used. Injury and snap-share
 concerns are surfaced as separate cautions regardless of who's favored.
 
-Data is cached in `.cache/` (player directory for a week, weekly
-projections for an hour, completed-week stats indefinitely) to avoid
-hitting the API on every run.
+Data is cached in `~/.fantasy-football/cache/` (player directory for a
+week, weekly projections for an hour, completed-week stats indefinitely)
+to avoid hitting the API on every run.
 
 ## Notes
 
 - If a player has no projection, it's usually a bye week or an injury
   (`Out`/`Doubtful`/`IR` etc.), which the tool will call out.
 - Possible next steps: matchup/opponent context (e.g. defense strength),
-  head-to-head history, or teaching `compare.py` to pull directly from
-  your ESPN roster instead of typed names.
+  head-to-head history.
 
-## ESPN roster (`roster.py`)
+## ESPN setup
+
+Needed for `ff roster` / `ff scoring-rules`, and for `ff compare`'s
+`league` scoring.
 
 ESPN doesn't have an official public API, but the same unofficial
-endpoints the ESPN web app itself uses can list your team's roster.
-This only pulls your roster for reference -- projections/recent-form
-data still comes from Sleeper via `compare.py`.
+endpoints the ESPN web app itself uses can list your team's roster and
+league scoring settings.
 
-### Setup
-
-1. Copy the example config:
+1. Copy the example config to `~/.fantasy-football/espn_config.json`:
    ```
-   cp espn_config.example.json espn_config.json
+   mkdir -p ~/.fantasy-football
+   cp espn_config.example.json ~/.fantasy-football/espn_config.json
    ```
 2. Fill in `league_id`, `season`, and `team_id`. All three are visible
    in the URL when you view your team on the ESPN Fantasy site, e.g.:
@@ -84,26 +98,27 @@ data still comes from Sleeper via `compare.py`.
    - Open dev tools -> Application (Chrome) or Storage (Firefox) ->
      Cookies -> `https://fantasy.espn.com`.
    - Copy the values of the `espn_s2` and `SWID` cookies into
-     `espn_config.json` (keep the curly braces around the SWID value).
+     `~/.fantasy-football/espn_config.json` (keep the curly braces
+     around the SWID value).
    - These are session cookies for your own ESPN account -- they stay
-     local in `espn_config.json` (already gitignored) and are only
-     ever sent to ESPN. They expire periodically (typically once a
-     year, or if you log out), at which point you'll need to re-grab
-     them.
+     local in `~/.fantasy-football/` (outside the repo entirely, so
+     there's no risk of committing them) and are only ever sent to
+     ESPN. They expire periodically (typically once a year, or if you
+     log out), at which point you'll need to re-grab them.
 
-### Usage
+## `ff roster`
 
 ```
-python3 roster.py
-python3 roster.py --week 3
-python3 roster.py --format ppr   # compare against generic PPR instead
+ff roster
+ff roster --week 3
+ff roster --format ppr   # compare against generic PPR instead
 ```
 
 Options:
 - `--week N` -- NFL week to pull projections for (defaults to the current week)
 - `--format ppr|half_ppr|std|league` -- scoring format for the Sleeper
   column (default: `league`, i.e. your actual ESPN scoring rules,
-  computed the same way as `compare.py`'s `league` format). The ESPN
+  computed the same way as `ff compare`'s `league` format). The ESPN
   column isn't affected by this -- it always reflects your league's own
   actual scoring settings, straight from ESPN itself.
 - `--no-color` -- disable colored output
@@ -132,10 +147,10 @@ being displayed.
 If ESPN rejects the request, the error message will point at what to
 check (usually stale `espn_s2`/`swid` or a wrong id).
 
-## League scoring rules (`scoring_rules.py`)
+## `ff scoring-rules`
 
 ```
-python3 scoring_rules.py
+ff scoring-rules
 ```
 
 Prints your league's actual scoring rules pulled from ESPN's settings
@@ -149,12 +164,12 @@ default/base value.
 
 Stat IDs are translated to readable labels using a mapping transcribed
 from the community `espn-api` library's source, rather than guessed --
-see `espn_stat_labels.py` for the source link.
+see `fantasy_football/espn_stat_labels.py` for the source link.
 
-### How "league" scoring works (`custom_scoring.py`)
+### How "league" scoring works (`fantasy_football/custom_scoring.py`)
 
-`compare.py --format league` (the default when `espn_config.json`
-exists) and `roster.py`'s Sleeper column both compute points by taking
+`ff compare --format league` (the default when `~/.fantasy-football/espn_config.json`
+exists) and `ff roster`'s Sleeper column both compute points by taking
 Sleeper's raw per-stat projections/actuals (yards, TDs, receptions,
 etc.) and multiplying each by your league's actual point value for
 that stat, instead of using Sleeper's own generic PPR/half-PPR/standard

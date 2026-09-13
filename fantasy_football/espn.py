@@ -11,11 +11,10 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
-CONFIG_PATH = Path(__file__).parent / "espn_config.json"
-CACHE_DIR = Path(__file__).parent / ".cache"
+from .paths import CACHE_DIR, CONFIG_PATH
+
 # The old fantasy.espn.com/apis/v3/... host now just redirects to the
 # marketing site; the live API sits behind this read host instead.
 URL_TEMPLATE = ("https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/{season}"
@@ -192,7 +191,7 @@ def get_scoring_settings(config):
 
 
 def _cached(cache_name, ttl_seconds, fetch_fn):
-    CACHE_DIR.mkdir(exist_ok=True)
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_file = CACHE_DIR / cache_name
     if cache_file.exists() and (time.time() - cache_file.stat().st_mtime) < ttl_seconds:
         return json.loads(cache_file.read_text())
